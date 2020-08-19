@@ -1,0 +1,123 @@
+From b5122bd1d5ad87f419774ea5eef8526dfcfd2436 Mon Sep 17 00:00:00 2001
+From: Athorcis <athorcis@athorcis.ovh>
+Date: Mon, 17 Aug 2020 21:44:45 +0200
+Subject: [PATCH] =?UTF-8?q?Ajout=20d'une=20option=20pour=20sp=C3=A9cifier?=
+ =?UTF-8?q?=20des=20couleurs=20qui=20doivent=20rester=20pr=C3=A9sentes?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ configure       |  2 +-
+ pngquant.c      | 36 ++++++++++++++++++++++++++++++++++++
+ pngquant_opts.c |  7 ++++++-
+ pngquant_opts.h |  1 +
+ 4 files changed, 44 insertions(+), 2 deletions(-)
+
+diff --git a/configure b/configure
+index 45a865d..8cd6385 100755
+--- a/configure
++++ b/configure
+@@ -289,7 +289,7 @@ status "Compiler" "$CC"
+ 
+ # init flags
+ CFLAGS=${CFLAGS:--fno-math-errno -funroll-loops -fomit-frame-pointer -Wall}
+-cflags "-std=c99 -I."
++cflags "-std=gnu99 -I."
+ 
+ # DEBUG
+ if [ -z "$DEBUG" ]; then
+diff --git a/pngquant.c b/pngquant.c
+index a603ab6..9cda329 100644
+--- a/pngquant.c
++++ b/pngquant.c
+@@ -457,6 +457,42 @@ static pngquant_error pngquant_file_internal(const char *filename, const char *o
+                            1.0/input_image_rwpng.gamma);
+         }
+ 
++        if (options->fixed_colors) {
++
++            char * fixed_colors = malloc(strlen(options->fixed_colors) + 1);
++            strcpy(fixed_colors, options->fixed_colors);
++
++            char * fixed_colors_pos;
++            char * rgba = strtok_r(fixed_colors, "/", &fixed_colors_pos);
++
++            while (rgba != NULL) {
++
++                char * rgba_pos;
++                char * r = strtok_r(rgba, ",", &rgba_pos);
++                char * g = strtok_r(NULL, ",", &rgba_pos);
++                char * b = strtok_r(NULL, ",", &rgba_pos);
++                char * a = strtok_r(NULL, ",", &rgba_pos);
++
++                if (r && g && b && a) {
++
++                    liq_color color = {
++                        .r = strtol(r, NULL, 10),
++                        .g = strtol(g, NULL, 10),
++                        .b = strtol(b, NULL, 10),
++                        .a = strtol(a, NULL, 10)
++                    };
++
++                    liq_image_add_fixed_color(input_image, color);
++                }
++                else {
++                    fputs("  error: colors need to be passed with format <r>,<b>,<g>,<a>/<r>,<g>,<b>,<a>/...\n", stderr);
++                    exit(INVALID_ARGUMENT);
++                }
++
++                rgba = strtok_r(NULL, "/", &fixed_colors_pos);
++            }
++        }
++
+         // when using image as source of a fixed palette the palette is extracted using regular quantization
+         liq_result *remap;
+         liq_error remap_error = liq_image_quantize(options->fixed_palette_image ? options->fixed_palette_image : input_image, liq, &remap);
+diff --git a/pngquant_opts.c b/pngquant_opts.c
+index 2ef4b06..d5a7ef3 100644
+--- a/pngquant_opts.c
++++ b/pngquant_opts.c
+@@ -52,7 +52,7 @@ static void fix_obsolete_options(const unsigned int argc, char *argv[])
+ }
+ 
+ enum {arg_floyd=1, arg_ordered, arg_ext, arg_no_force, arg_iebug,
+-    arg_transbug, arg_map, arg_posterize, arg_skip_larger, arg_strip};
++    arg_transbug, arg_map, arg_posterize, arg_skip_larger, arg_strip, arg_fixed_colors};
+ 
+ static const struct option long_options[] = {
+     {"verbose", no_argument, NULL, 'v'},
+@@ -72,6 +72,7 @@ static const struct option long_options[] = {
+     {"posterize", required_argument, NULL, arg_posterize},
+     {"strip", no_argument, NULL, arg_strip},
+     {"map", required_argument, NULL, arg_map},
++    {"fixed-colors", required_argument, NULL, arg_fixed_colors},
+     {"version", no_argument, NULL, 'V'},
+     {"help", no_argument, NULL, 'h'},
+     {NULL, 0, NULL, 0},
+@@ -148,6 +149,10 @@ pngquant_error pngquant_parse_options(int argc, char *argv[], struct pngquant_op
+                 options->map_file = optarg;
+                 break;
+ 
++            case arg_fixed_colors:
++                options->fixed_colors = optarg;
++                break;
++
+             case 'h':
+                 options->print_help = true;
+                 break;
+diff --git a/pngquant_opts.h b/pngquant_opts.h
+index 74be745..95c76b2 100644
+--- a/pngquant_opts.h
++++ b/pngquant_opts.h
+@@ -9,6 +9,7 @@ struct pngquant_options {
+     const char *extension;
+     const char *output_file_path;
+     const char *map_file;
++    const char *fixed_colors;
+     char *const *files;
+     unsigned int num_files;
+     unsigned int colors;
+-- 
+2.28.0.windows.1
+
